@@ -813,8 +813,10 @@ function escapeHtml(str) {
 }
 
 function escapeRegex(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\]/g, "\\$&");
+  // Échappe tous les caractères spéciaux de regex
+  return String(str).replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
 }
+
 
 function removeUndefined(obj) {
   if (Array.isArray(obj)) {
