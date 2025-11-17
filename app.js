@@ -1,6 +1,6 @@
 // ======================================================
 // Mémento opérationnel IA – RCH
-// app.js — Version 0.4.0
+// app.js — Version 0.4.1 (adaptation taille QR dynamique)
 // ------------------------------------------------------
 // - Instance unique Html5Qrcode (caméra + fichiers)
 // - Lecture de QR JSON → génération des champs variables
@@ -10,6 +10,7 @@
 //   * compression DEFLATE + Base64 (pako)
 //   * wrapper { z: "pako-base64-v1", d: "<base64>" }
 // - Lecture compatible : ancien format, compact, compact+compressé
+// - Ajustement de la taille du QR en fonction de la longueur du texte
 // ======================================================
 
 let html5QrCode = null;
@@ -35,7 +36,22 @@ function ensureHtml5QrCodeInstance() {
     );
   }
   if (!html5QrCode) {
-    html5QrCode = new Html5Qrcode("camera");
+    // Configuration légèrement plus robuste
+    try {
+      html5QrCode = new Html5Qrcode("camera", {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
+        verbose: false
+      });
+    } catch (e) {
+      // fallback minimal si la config avancée pose problème
+      console.warn("Configuration avancée Html5Qrcode impossible, fallback simple :", e);
+      html5QrCode = new Html5Qrcode("camera");
+    }
   }
   return html5QrCode;
 }
@@ -195,15 +211,20 @@ function scanQrFromFile(file) {
   if (isCameraRunning) stopCameraScan();
 
   qr
-    .scanFile(file, false)
+    // true → affiche l'image et permet parfois une meilleure analyse
+    .scanFile(file, true)
     .then((decodedText) => {
       handleQrDecoded(decodedText);
       qr.clear();
       html5QrCode = null;
     })
     .catch((err) => {
+      console.error("Erreur scanFile :", err);
       cameraError.textContent =
-        "Impossible de lire le QR depuis le fichier : " +
+        "Impossible de lire le QR depuis le fichier. " +
+        "L'image est probablement trop petite, floue ou le code trop dense. " +
+        "Essayez avec le PNG généré en 400×400 ou plus. " +
+        "Détail technique : " +
         (err?.message || err);
       cameraError.hidden = false;
     });
@@ -724,13 +745,21 @@ function generateJsonAndQr() {
     qrText = compactJson; // fallback non compressé
   }
 
+  // 4) Détermination dynamique de la taille du QR
+  const len = qrText.length;
+  let size = 300;          // valeur par défaut
+  if (len > 1800) size = 400;
+  if (len > 2600) size = 500;
+  if (len > 3400) size = 600;
+
   try {
     new QRCode(qrContainer, {
       text: qrText,
-      width: 200,
-      height: 200,
-      correctLevel: QRCode.CorrectLevel.L
+      width: size,
+      height: size,
+      correctLevel: QRCode.CorrectLevel.L // niveau bas pour limiter la densité
     });
+    // Téléchargement OK tant qu'on n'a qu'un seul QR
     downloadBtn.disabled = false;
   } catch (e) {
     console.error("Erreur génération QR :", e);
@@ -816,7 +845,6 @@ function escapeRegex(str) {
   // Échappe tous les caractères spéciaux de regex
   return String(str).replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
 }
-
 
 function removeUndefined(obj) {
   if (Array.isArray(obj)) {
