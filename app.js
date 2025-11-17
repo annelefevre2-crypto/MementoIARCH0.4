@@ -125,26 +125,7 @@ function initScanView() {
 // --- Aide : calcul d'un qrbox carré + synchronisation overlay ---
 
 // Fonction utilitaire : calcule un carré centré dans la vidéo
-function qrboxCalculator(viewfinderWidth, viewfinderHeight) {
-  // On prend la plus petite dimension pour rester dans l'image
-  const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-  const size = Math.floor(minEdge * 0.7); // 70% du plus petit côté
 
-  // Met à jour l'overlay visuel pour qu'il ait la même taille
-  updateScanOverlay(size);
-
-  // html5-qrcode attend un objet { width, height }
-  return { width: size, height: size };
-}
-
-// Met à jour l'overlay HTML/CSS pour qu'il corresponde au qrbox
-function updateScanOverlay(boxSize) {
-  const scanOverlay = document.getElementById("scanOverlay");
-  if (!scanOverlay) return;
-
-  scanOverlay.style.width = boxSize + "px";
-  scanOverlay.style.height = boxSize + "px";
-}
 
 // --- Caméra ---
 
@@ -167,8 +148,8 @@ function startCameraScan() {
     return;
   }
 
-  // Callbacks communs + config avec qrbox dynamique
-  const config = { fps: 10, qrbox: qrboxCalculator };
+  // ✅ config simple et robuste, comme ta version qui lisait bien les QR
+  const config = { fps: 10, qrbox: 250 };
 
   const onScanSuccess = (decodedText) => {
     handleQrDecoded(decodedText);
@@ -179,14 +160,13 @@ function startCameraScan() {
     console.debug("Erreur scan frame:", errorMessage);
   };
 
-  // 1️⃣ Tentative PRIORITAIRE : facingMode = "environment" (caméra arrière)
-  qr
-    .start(
-      { facingMode: "environment" },
-      config,
-      onScanSuccess,
-      onScanFailure
-    )
+  // 1️⃣ Tentative PRIORITAIRE : caméra arrière
+  qr.start(
+    { facingMode: "environment" },
+    config,
+    onScanSuccess,
+    onScanFailure
+  )
     .then(() => {
       isCameraRunning = true;
     })
@@ -196,14 +176,13 @@ function startCameraScan() {
         errFacingMode
       );
 
-      // 2️⃣ Fallback : on repasse par getCameras()
+      // 2️⃣ Fallback : liste des caméras
       Html5Qrcode.getCameras()
         .then((devices) => {
           if (!devices || devices.length === 0) {
             throw new Error("Aucune caméra disponible.");
           }
 
-          // On essaie de deviner la caméra arrière par son label
           const backCamera = devices.find((d) => {
             const label = (d.label || "").toLowerCase();
             return (
