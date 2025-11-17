@@ -1,6 +1,6 @@
 // ======================================================
 // Mémento opérationnel IA – RCH
-// app.js — Version 0.4.2 (adaptation taille QR dynamique)
+// app.js — Version 0.4.3 (adaptation taille QR dynamique + caméra face)
 // ------------------------------------------------------
 // - Instance unique Html5Qrcode (caméra + fichiers)
 // - Lecture de QR JSON → génération des champs variables
