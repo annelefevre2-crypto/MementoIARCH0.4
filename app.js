@@ -143,38 +143,68 @@ function startCameraScan() {
     return;
   }
 
-  Html5Qrcode.getCameras()
-    .then((devices) => {
-      if (!devices || devices.length === 0) {
-        throw new Error("Aucune caméra disponible.");
-      }
-      const backCamera = devices.find((d) =>
-        d.label.toLowerCase().includes("back")
-      );
-      const cameraId = backCamera ? backCamera.id : devices[0].id;
+  // Callbacks communs
+  const config = { fps: 10, qrbox: 250 };
 
-      return qr.start(
-        cameraId,
-        { fps: 10, qrbox: 250 },
-        (decodedText) => {
-          handleQrDecoded(decodedText);
-          stopCameraScan();
-        },
-        (errorMessage) => {
-          console.debug("Erreur scan frame:", errorMessage);
-        }
-      );
-    })
+  const onScanSuccess = (decodedText) => {
+    handleQrDecoded(decodedText);
+    stopCameraScan();
+  };
+
+  const onScanFailure = (errorMessage) => {
+    console.debug("Erreur scan frame:", errorMessage);
+  };
+
+  // 1️⃣ Tentative PRIORITAIRE : facingMode = "environment" (caméra arrière)
+  qr.start(
+    { facingMode: "environment" }, // <- clé pour forcer la caméra arrière quand possible
+    config,
+    onScanSuccess,
+    onScanFailure
+  )
     .then(() => {
       isCameraRunning = true;
     })
-    .catch((err) => {
-      cameraError.textContent =
-        "Impossible d'activer la caméra : " + (err?.message || err);
-      cameraError.hidden = false;
-      videoBox.hidden = true;
+    .catch((errFacingMode) => {
+      console.warn(
+        "Impossible de démarrer avec facingMode=environment, fallback sur getCameras() :",
+        errFacingMode
+      );
+
+      // 2️⃣ Fallback : on repasse par getCameras() comme dans ton code initial
+      Html5Qrcode.getCameras()
+        .then((devices) => {
+          if (!devices || devices.length === 0) {
+            throw new Error("Aucune caméra disponible.");
+          }
+
+          // On essaie de deviner la caméra arrière par son label
+          const backCamera = devices.find((d) => {
+            const label = (d.label || "").toLowerCase();
+            return (
+              label.includes("back") ||
+              label.includes("rear") ||
+              label.includes("environment") ||
+              label.includes("arrière")
+            );
+          });
+
+          const cameraId = backCamera ? backCamera.id : devices[0].id;
+
+          return qr.start(cameraId, config, onScanSuccess, onScanFailure);
+        })
+        .then(() => {
+          isCameraRunning = true;
+        })
+        .catch((err) => {
+          cameraError.textContent =
+            "Impossible d'activer la caméra : " + (err?.message || err);
+          cameraError.hidden = false;
+          videoBox.hidden = true;
+        });
     });
 }
+
 
 function stopCameraScan() {
   const videoBox = document.getElementById("videoBox");
