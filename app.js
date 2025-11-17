@@ -1,6 +1,6 @@
 // ======================================================
 // Mémento opérationnel IA – RCH
-// app.js — Version 0.4.3 (adaptation taille QR dynamique + caméra face)
+// app.js — Version 0.4.4 (caméra arrière + qrbox carré dynamique)
 // ------------------------------------------------------
 // - Instance unique Html5Qrcode (caméra + fichiers)
 // - Lecture de QR JSON → génération des champs variables
@@ -11,6 +11,7 @@
 //   * wrapper { z: "pako-base64-v1", d: "<base64>" }
 // - Lecture compatible : ancien format, compact, compact+compressé
 // - Ajustement de la taille du QR en fonction de la longueur du texte
+// - Caméra arrière prioritaire + zone de scan carrée
 // ======================================================
 
 let html5QrCode = null;
@@ -39,9 +40,7 @@ function ensureHtml5QrCodeInstance() {
     // Configuration légèrement plus robuste
     try {
       html5QrCode = new Html5Qrcode("camera", {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE
-        ],
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true
         },
@@ -49,7 +48,10 @@ function ensureHtml5QrCodeInstance() {
       });
     } catch (e) {
       // fallback minimal si la config avancée pose problème
-      console.warn("Configuration avancée Html5Qrcode impossible, fallback simple :", e);
+      console.warn(
+        "Configuration avancée Html5Qrcode impossible, fallback simple :",
+        e
+      );
       html5QrCode = new Html5Qrcode("camera");
     }
   }
@@ -111,15 +113,37 @@ function initScanView() {
 
   infosComplementaires.addEventListener("input", () => updatePromptPreview());
 
-  generatePromptBtn.addEventListener("click", () =>
-    updatePromptPreview(true)
-  );
+  generatePromptBtn.addEventListener("click", () => updatePromptPreview(true));
 
   btnChatgpt.addEventListener("click", () => openIa("chatgpt"));
   btnPerplexity.addEventListener("click", () => openIa("perplexity"));
   btnMistral.addEventListener("click", () => openIa("mistral"));
 
   setIaButtonsState(null);
+}
+
+// --- Aide : calcul d'un qrbox carré + synchronisation overlay ---
+
+// Fonction utilitaire : calcule un carré centré dans la vidéo
+function qrboxCalculator(viewfinderWidth, viewfinderHeight) {
+  // On prend la plus petite dimension pour rester dans l'image
+  const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+  const size = Math.floor(minEdge * 0.7); // 70% du plus petit côté
+
+  // Met à jour l'overlay visuel pour qu'il ait la même taille
+  updateScanOverlay(size);
+
+  // html5-qrcode attend un objet { width, height }
+  return { width: size, height: size };
+}
+
+// Met à jour l'overlay HTML/CSS pour qu'il corresponde au qrbox
+function updateScanOverlay(boxSize) {
+  const scanOverlay = document.getElementById("scanOverlay");
+  if (!scanOverlay) return;
+
+  scanOverlay.style.width = boxSize + "px";
+  scanOverlay.style.height = boxSize + "px";
 }
 
 // --- Caméra ---
@@ -143,8 +167,8 @@ function startCameraScan() {
     return;
   }
 
-  // Callbacks communs
-  const config = { fps: 10, qrbox: 250 };
+  // Callbacks communs + config avec qrbox dynamique
+  const config = { fps: 10, qrbox: qrboxCalculator };
 
   const onScanSuccess = (decodedText) => {
     handleQrDecoded(decodedText);
@@ -156,12 +180,13 @@ function startCameraScan() {
   };
 
   // 1️⃣ Tentative PRIORITAIRE : facingMode = "environment" (caméra arrière)
-  qr.start(
-    { facingMode: "environment" }, // <- clé pour forcer la caméra arrière quand possible
-    config,
-    onScanSuccess,
-    onScanFailure
-  )
+  qr
+    .start(
+      { facingMode: "environment" },
+      config,
+      onScanSuccess,
+      onScanFailure
+    )
     .then(() => {
       isCameraRunning = true;
     })
@@ -171,7 +196,7 @@ function startCameraScan() {
         errFacingMode
       );
 
-      // 2️⃣ Fallback : on repasse par getCameras() comme dans ton code initial
+      // 2️⃣ Fallback : on repasse par getCameras()
       Html5Qrcode.getCameras()
         .then((devices) => {
           if (!devices || devices.length === 0) {
@@ -204,7 +229,6 @@ function startCameraScan() {
         });
     });
 }
-
 
 function stopCameraScan() {
   const videoBox = document.getElementById("videoBox");
@@ -722,8 +746,12 @@ function generateJsonAndQr() {
 
   const categorie = document.getElementById("createCategorie").value.trim();
   const titre = document.getElementById("createTitre").value.trim();
-  const objectif = document.getElementById("createObjectif").value.trim();
-  const concepteur = document.getElementById("createConcepteur").value.trim();
+  const objectif = document
+    .getElementById("createObjectif")
+    .value.trim();
+  const concepteur = document
+    .getElementById("createConcepteur")
+    .value.trim();
   const dateMaj = document.getElementById("createDateMaj").value.trim();
   const version = document.getElementById("createVersion").value.trim();
   const prompt = document.getElementById("createPrompt").value;
@@ -737,7 +765,8 @@ function generateJsonAndQr() {
   if (!objectif) errors.push("L'objectif de la fiche est obligatoire.");
   if (!concepteur) errors.push("Le nom du concepteur est obligatoire.");
   if (!version) errors.push("La version est obligatoire.");
-  if (!prompt.trim()) errors.push("Le prompt de la fiche ne doit pas être vide.");
+  if (!prompt.trim())
+    errors.push("Le prompt de la fiche ne doit pas être vide.");
 
   const variables = [];
   const rows = document.querySelectorAll("#variablesBuilder .variable-row");
@@ -759,11 +788,15 @@ function generateJsonAndQr() {
     if (!label && !id) return;
 
     if (!label) {
-      errors.push("Variable #" + (index + 1) + " : le label est obligatoire.");
+      errors.push(
+        "Variable #" + (index + 1) + " : le label est obligatoire."
+      );
     }
     if (!id) {
       errors.push(
-        "Variable #" + (index + 1) + " : l'identifiant est obligatoire."
+        "Variable #" +
+          (index + 1) +
+          " : l'identifiant est obligatoire."
       );
     }
     if (id && ids.has(id)) {
@@ -865,7 +898,7 @@ function generateJsonAndQr() {
 
   // 4) Détermination dynamique de la taille du QR
   const len = qrText.length;
-  let size = 300;          // valeur par défaut
+  let size = 300; // valeur par défaut
   if (len > 1800) size = 400;
   if (len > 2600) size = 500;
   if (len > 3400) size = 600;
