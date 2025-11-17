@@ -1,6 +1,6 @@
 // ======================================================
 // Mémento opérationnel IA – RCH
-// app.js — Version 0.4.1 (adaptation taille QR dynamique)
+// app.js — Version 0.4.2 (adaptation taille QR dynamique)
 // ------------------------------------------------------
 // - Instance unique Html5Qrcode (caméra + fichiers)
 // - Lecture de QR JSON → génération des champs variables
@@ -331,35 +331,123 @@ function renderVariablesForm() {
       labelEl.appendChild(star);
     }
 
-    let inputEl;
-    if (type === "number") {
-      inputEl = document.createElement("input");
-      inputEl.type = "number";
-    } else if (type === "file") {
-      inputEl = document.createElement("input");
-      inputEl.type = "file";
+    fieldDiv.appendChild(labelEl);
+
+    const normalizedType = String(type || "text").toLowerCase();
+
+    // 🔍 Cas particulier : champ de géolocalisation
+    if (normalizedType === "geoloc") {
+      const geoField = createGeolocField(id, obligatoire);
+      fieldDiv.appendChild(geoField);
     } else {
-      inputEl = document.createElement("input");
-      inputEl.type = "text";
+      // Cas standard : texte, number, file, etc.
+      let inputEl;
+      if (normalizedType === "number") {
+        inputEl = document.createElement("input");
+        inputEl.type = "number";
+      } else if (normalizedType === "file") {
+        inputEl = document.createElement("input");
+        inputEl.type = "file";
+      } else {
+        inputEl = document.createElement("input");
+        inputEl.type = "text";
+      }
+
+      inputEl.id = "var-" + id;
+      inputEl.dataset.varId = id;
+      inputEl.dataset.varObligatoire = String(obligatoire);
+      inputEl.placeholder = placeholder || "";
+
+      inputEl.addEventListener("input", () => {
+        currentVariablesValues[id] =
+          inputEl.type === "file"
+            ? (inputEl.files && inputEl.files[0] && inputEl.files[0].name) || ""
+            : inputEl.value;
+        updatePromptPreview();
+      });
+
+      fieldDiv.appendChild(inputEl);
     }
 
-    inputEl.id = "var-" + id;
-    inputEl.dataset.varId = id;
-    inputEl.dataset.varObligatoire = String(obligatoire);
-    inputEl.placeholder = placeholder || "";
-
-    inputEl.addEventListener("input", () => {
-      currentVariablesValues[id] =
-        inputEl.type === "file"
-          ? (inputEl.files && inputEl.files[0] && inputEl.files[0].name) || ""
-          : inputEl.value;
-      updatePromptPreview();
-    });
-
-    fieldDiv.appendChild(labelEl);
-    fieldDiv.appendChild(inputEl);
     container.appendChild(fieldDiv);
   });
+}
+
+// Champ géolocalisation : bouton + latitude / longitude
+function createGeolocField(id, obligatoire) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "geoloc-wrapper";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "Acquérir la position";
+  btn.className = "btn btn-secondary btn-geoloc";
+
+  const latInput = document.createElement("input");
+  latInput.type = "text";
+  latInput.placeholder = "Latitude";
+  latInput.id = "var-" + id + "-lat";
+  latInput.className = "geoloc-input";
+  latInput.dataset.varId = id;
+  latInput.dataset.varObligatoire = String(obligatoire);
+
+  const lonInput = document.createElement("input");
+  lonInput.type = "text";
+  lonInput.placeholder = "Longitude";
+  lonInput.id = "var-" + id + "-lon";
+  lonInput.className = "geoloc-input";
+  lonInput.dataset.varId = id;
+  lonInput.dataset.varObligatoire = String(obligatoire);
+
+  // Mise à jour de la valeur stockée (format "lat, lon")
+  const updateValue = () => {
+    const lat = latInput.value.trim();
+    const lon = lonInput.value.trim();
+    currentVariablesValues[id] = lat && lon ? `${lat}, ${lon}` : "";
+    updatePromptPreview();
+  };
+
+  latInput.addEventListener("input", updateValue);
+  lonInput.addEventListener("input", updateValue);
+
+  btn.addEventListener("click", () => {
+    if (!("geolocation" in navigator)) {
+      alert("La géolocalisation n'est pas supportée par ce navigateur.");
+      return;
+    }
+
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = "Acquisition en cours…";
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lon = pos.coords.longitude.toFixed(6);
+        latInput.value = lat;
+        lonInput.value = lon;
+        updateValue();
+        btn.disabled = false;
+        btn.textContent = "Mettre à jour la position";
+      },
+      (err) => {
+        alert("Impossible de récupérer la position : " + err.message);
+        btn.disabled = false;
+        btn.textContent = originalText;
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0
+      }
+    );
+  });
+
+  wrapper.appendChild(btn);
+  wrapper.appendChild(latInput);
+  wrapper.appendChild(lonInput);
+
+  return wrapper;
 }
 
 // --- Construction du prompt final ---
