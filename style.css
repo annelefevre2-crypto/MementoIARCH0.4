@@ -165,29 +165,30 @@ body {
 }
 
 /* --- Zone vidéo / scan --- */
+/* --- Zone vidéo / scan --- */
 
 .video-box {
   margin-top: 8px;
   border-radius: 12px;
   overflow: hidden;
   background: #111827;
-  position: relative;           /* ✅ pour positionner l’overlay */
+  position: relative;          /* pour l'overlay */
 }
 
-/* conteneur camera (div #camera) */
+/* conteneur camera (div id="camera") */
 .camera-view {
   width: 100%;
-  height: 260px;
+  height: 260px;               /* hauteur fixe raisonnable */
 }
 
-/* vidéo insérée par html5-qrcode dans #camera */
+/* vidéo insérée par html5-qrcode */
 #camera video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;         /* ✅ on ne recadre plus, on voit tout le QR */
 }
 
-/* overlay carré centré, aligné sur qrbox=250 */
+/* overlay carré centré, aligné avec qrbox=250 */
 #scanOverlay {
   position: absolute;
   top: 50%;
@@ -196,9 +197,11 @@ body {
   height: 250px;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  border: 3px solid #ffffff;    /* tu peux remplacer par tes coins personnalisés si besoin */
+  border: 3px solid #ffffff;
   border-radius: 8px;
+  z-index: 10;
 }
+
 
 .file-import {
   margin-top: 12px;
