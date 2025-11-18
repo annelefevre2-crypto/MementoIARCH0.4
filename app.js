@@ -1,6 +1,6 @@
 // ======================================================
 // Mémento opérationnel IA – RCH
-// app.js — Version 0.4.5 (caméra arrière + qrbox carré dynamique)
+// app.js — Version 0.4.6 (caméra arrière + qrbox carré dynamique)
 // ------------------------------------------------------
 // - Instance unique Html5Qrcode (caméra + fichiers)
 // - Lecture de QR JSON → génération des champs variables
