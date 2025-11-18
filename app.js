@@ -29,7 +29,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initCreateView();
 });
 
-// Helper : vérifie la présence de la lib Html5Qrcode
 function ensureHtml5QrCodeInstance() {
   if (typeof Html5Qrcode === "undefined") {
     throw new Error(
@@ -37,8 +36,8 @@ function ensureHtml5QrCodeInstance() {
     );
   }
   if (!html5QrCode) {
-    // Configuration légèrement plus robuste
     try {
+      // ✅ Config proche de ta version initiale
       html5QrCode = new Html5Qrcode("camera", {
         formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
         experimentalFeatures: {
@@ -47,7 +46,6 @@ function ensureHtml5QrCodeInstance() {
         verbose: false
       });
     } catch (e) {
-      // fallback minimal si la config avancée pose problème
       console.warn(
         "Configuration avancée Html5Qrcode impossible, fallback simple :",
         e
@@ -148,66 +146,64 @@ function startCameraScan() {
     return;
   }
 
-  // ✅ config simple et robuste, comme ta version qui lisait bien les QR
-  const config = { fps: 10, qrbox: 250 };
+  // ✅ Config simple : même zone que ton overlay (260x260)
+  const config = {
+    fps: 10,
+    qrbox: 260    // carré centré
+  };
 
   const onScanSuccess = (decodedText) => {
+    console.log("QR décodé :", decodedText);
     handleQrDecoded(decodedText);
     stopCameraScan();
   };
 
   const onScanFailure = (errorMessage) => {
-    console.debug("Erreur scan frame:", errorMessage);
+    // appelé très souvent, on se contente d'un log discret
+    // console.debug("Erreur scan frame:", errorMessage);
   };
 
-  // 1️⃣ Tentative PRIORITAIRE : caméra arrière
-  qr.start(
-    { facingMode: "environment" },
-    config,
-    onScanSuccess,
-    onScanFailure
-  )
+  // 🔍 On passe TOUJOURS par getCameras (Android + iOS + desktop)
+  Html5Qrcode.getCameras()
+    .then((devices) => {
+      if (!devices || devices.length === 0) {
+        throw new Error("Aucune caméra disponible.");
+      }
+
+      // Caméra par défaut
+      let cameraId = devices[0].id;
+
+      // Si plusieurs caméras, on essaie de trouver l'arrière
+      if (devices.length > 1) {
+        const backCamera = devices.find((d) => {
+          const label = (d.label || "").toLowerCase();
+          return (
+            label.includes("back") ||
+            label.includes("rear") ||
+            label.includes("environment") ||
+            label.includes("arrière")
+          );
+        });
+        if (backCamera) {
+          cameraId = backCamera.id;
+        }
+      }
+
+      console.log("Caméra utilisée pour le scan :", cameraId);
+      return qr.start(cameraId, config, onScanSuccess, onScanFailure);
+    })
     .then(() => {
       isCameraRunning = true;
     })
-    .catch((errFacingMode) => {
-      console.warn(
-        "Impossible de démarrer avec facingMode=environment, fallback sur getCameras() :",
-        errFacingMode
-      );
-
-      // 2️⃣ Fallback : liste des caméras
-      Html5Qrcode.getCameras()
-        .then((devices) => {
-          if (!devices || devices.length === 0) {
-            throw new Error("Aucune caméra disponible.");
-          }
-
-          const backCamera = devices.find((d) => {
-            const label = (d.label || "").toLowerCase();
-            return (
-              label.includes("back") ||
-              label.includes("rear") ||
-              label.includes("environment") ||
-              label.includes("arrière")
-            );
-          });
-
-          const cameraId = backCamera ? backCamera.id : devices[0].id;
-
-          return qr.start(cameraId, config, onScanSuccess, onScanFailure);
-        })
-        .then(() => {
-          isCameraRunning = true;
-        })
-        .catch((err) => {
-          cameraError.textContent =
-            "Impossible d'activer la caméra : " + (err?.message || err);
-          cameraError.hidden = false;
-          videoBox.hidden = true;
-        });
+    .catch((err) => {
+      console.error("Erreur démarrage caméra :", err);
+      cameraError.textContent =
+        "Impossible d'activer la caméra : " + (err?.message || err);
+      cameraError.hidden = false;
+      videoBox.hidden = true;
     });
 }
+
 
 function stopCameraScan() {
   const videoBox = document.getElementById("videoBox");
