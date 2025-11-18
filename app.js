@@ -133,10 +133,10 @@ function startCameraScan() {
     return;
   }
 
-  // ✅ Config MINIMALE : pas de qrbox, pas d'aspectRatio
-  // → Html5Qrcode analyse TOUTE l'image
+  // ✅ Config simple : qrbox = 250, carré centré
   const config = {
-    fps: 10
+    fps: 10,
+    qrbox: 250
   };
 
   const onScanSuccess = (decodedText) => {
@@ -146,21 +146,21 @@ function startCameraScan() {
   };
 
   const onScanFailure = (errorMessage) => {
-    // Appelé souvent, on log juste en debug
+    // appelé très souvent, on évite le spam de logs
     // console.debug("Erreur scan frame:", errorMessage);
   };
 
-  // 🔍 Toujours passer par getCameras (Android + iOS + desktop)
+  // 🔍 Toujours passer par getCameras : on choisit la caméra arrière si possible
   Html5Qrcode.getCameras()
     .then((devices) => {
       if (!devices || devices.length === 0) {
         throw new Error("Aucune caméra disponible.");
       }
 
-      // Caméra par défaut
+      // par défaut, première caméra
       let cameraId = devices[0].id;
 
-      // Si plusieurs caméras, on essaie de trouver l'arrière
+      // si plusieurs, on essaie de trouver l'arrière
       if (devices.length > 1) {
         const backCamera = devices.find((d) => {
           const label = (d.label || "").toLowerCase();
@@ -190,6 +190,7 @@ function startCameraScan() {
       videoBox.hidden = true;
     });
 }
+
 
 
 
