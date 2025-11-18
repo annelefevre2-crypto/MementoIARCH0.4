@@ -1,6 +1,6 @@
 // ======================================================
 // Mémento opérationnel IA – RCH
-// app.js — Version 0.4.7 (caméra arrière + qrbox carré dynamique)
+// app.js — Version 0.5.0 (adaptation taille QR dynamique)
 // ------------------------------------------------------
 // - Instance unique Html5Qrcode (caméra + fichiers)
 // - Lecture de QR JSON → génération des champs variables
@@ -11,7 +11,6 @@
 //   * wrapper { z: "pako-base64-v1", d: "<base64>" }
 // - Lecture compatible : ancien format, compact, compact+compressé
 // - Ajustement de la taille du QR en fonction de la longueur du texte
-// - Caméra arrière prioritaire + zone de scan carrée
 // ======================================================
 
 let html5QrCode = null;
@@ -29,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initCreateView();
 });
 
+// Helper : vérifie la présence de la lib Html5Qrcode
 function ensureHtml5QrCodeInstance() {
   if (typeof Html5Qrcode === "undefined") {
     throw new Error(
@@ -36,12 +36,25 @@ function ensureHtml5QrCodeInstance() {
     );
   }
   if (!html5QrCode) {
-    // ✅ Version simple, sans features expérimentales
-    html5QrCode = new Html5Qrcode("camera");
+    // Configuration légèrement plus robuste
+    try {
+      html5QrCode = new Html5Qrcode("camera", {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
+        verbose: false
+      });
+    } catch (e) {
+      // fallback minimal si la config avancée pose problème
+      console.warn("Configuration avancée Html5Qrcode impossible, fallback simple :", e);
+      html5QrCode = new Html5Qrcode("camera");
+    }
   }
   return html5QrCode;
 }
-
 
 // =============================
 // Onglets
@@ -98,7 +111,9 @@ function initScanView() {
 
   infosComplementaires.addEventListener("input", () => updatePromptPreview());
 
-  generatePromptBtn.addEventListener("click", () => updatePromptPreview(true));
+  generatePromptBtn.addEventListener("click", () =>
+    updatePromptPreview(true)
+  );
 
   btnChatgpt.addEventListener("click", () => openIa("chatgpt"));
   btnPerplexity.addEventListener("click", () => openIa("perplexity"));
@@ -106,11 +121,6 @@ function initScanView() {
 
   setIaButtonsState(null);
 }
-
-// --- Aide : calcul d'un qrbox carré + synchronisation overlay ---
-
-// Fonction utilitaire : calcule un carré centré dans la vidéo
-
 
 // --- Caméra ---
 
@@ -133,66 +143,38 @@ function startCameraScan() {
     return;
   }
 
-  // ✅ Config simple : qrbox = 250, carré centré
-  const config = {
-    fps: 10,
-    qrbox: 250
-  };
-
-  const onScanSuccess = (decodedText) => {
-    console.log("QR décodé :", decodedText);
-    handleQrDecoded(decodedText);
-    stopCameraScan();
-  };
-
-  const onScanFailure = (errorMessage) => {
-    // appelé très souvent, on évite le spam de logs
-    // console.debug("Erreur scan frame:", errorMessage);
-  };
-
-  // 🔍 Toujours passer par getCameras : on choisit la caméra arrière si possible
   Html5Qrcode.getCameras()
     .then((devices) => {
       if (!devices || devices.length === 0) {
         throw new Error("Aucune caméra disponible.");
       }
+      const backCamera = devices.find((d) =>
+        d.label.toLowerCase().includes("back")
+      );
+      const cameraId = backCamera ? backCamera.id : devices[0].id;
 
-      // par défaut, première caméra
-      let cameraId = devices[0].id;
-
-      // si plusieurs, on essaie de trouver l'arrière
-      if (devices.length > 1) {
-        const backCamera = devices.find((d) => {
-          const label = (d.label || "").toLowerCase();
-          return (
-            label.includes("back") ||
-            label.includes("rear") ||
-            label.includes("environment") ||
-            label.includes("arrière")
-          );
-        });
-        if (backCamera) {
-          cameraId = backCamera.id;
+      return qr.start(
+        cameraId,
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+          handleQrDecoded(decodedText);
+          stopCameraScan();
+        },
+        (errorMessage) => {
+          console.debug("Erreur scan frame:", errorMessage);
         }
-      }
-
-      console.log("Caméra utilisée pour le scan :", cameraId);
-      return qr.start(cameraId, config, onScanSuccess, onScanFailure);
+      );
     })
     .then(() => {
       isCameraRunning = true;
     })
     .catch((err) => {
-      console.error("Erreur démarrage caméra :", err);
       cameraError.textContent =
         "Impossible d'activer la caméra : " + (err?.message || err);
       cameraError.hidden = false;
       videoBox.hidden = true;
     });
 }
-
-
-
 
 function stopCameraScan() {
   const videoBox = document.getElementById("videoBox");
@@ -349,123 +331,35 @@ function renderVariablesForm() {
       labelEl.appendChild(star);
     }
 
-    fieldDiv.appendChild(labelEl);
-
-    const normalizedType = String(type || "text").toLowerCase();
-
-    // 🔍 Cas particulier : champ de géolocalisation
-    if (normalizedType === "geoloc") {
-      const geoField = createGeolocField(id, obligatoire);
-      fieldDiv.appendChild(geoField);
+    let inputEl;
+    if (type === "number") {
+      inputEl = document.createElement("input");
+      inputEl.type = "number";
+    } else if (type === "file") {
+      inputEl = document.createElement("input");
+      inputEl.type = "file";
     } else {
-      // Cas standard : texte, number, file, etc.
-      let inputEl;
-      if (normalizedType === "number") {
-        inputEl = document.createElement("input");
-        inputEl.type = "number";
-      } else if (normalizedType === "file") {
-        inputEl = document.createElement("input");
-        inputEl.type = "file";
-      } else {
-        inputEl = document.createElement("input");
-        inputEl.type = "text";
-      }
-
-      inputEl.id = "var-" + id;
-      inputEl.dataset.varId = id;
-      inputEl.dataset.varObligatoire = String(obligatoire);
-      inputEl.placeholder = placeholder || "";
-
-      inputEl.addEventListener("input", () => {
-        currentVariablesValues[id] =
-          inputEl.type === "file"
-            ? (inputEl.files && inputEl.files[0] && inputEl.files[0].name) || ""
-            : inputEl.value;
-        updatePromptPreview();
-      });
-
-      fieldDiv.appendChild(inputEl);
+      inputEl = document.createElement("input");
+      inputEl.type = "text";
     }
 
+    inputEl.id = "var-" + id;
+    inputEl.dataset.varId = id;
+    inputEl.dataset.varObligatoire = String(obligatoire);
+    inputEl.placeholder = placeholder || "";
+
+    inputEl.addEventListener("input", () => {
+      currentVariablesValues[id] =
+        inputEl.type === "file"
+          ? (inputEl.files && inputEl.files[0] && inputEl.files[0].name) || ""
+          : inputEl.value;
+      updatePromptPreview();
+    });
+
+    fieldDiv.appendChild(labelEl);
+    fieldDiv.appendChild(inputEl);
     container.appendChild(fieldDiv);
   });
-}
-
-// Champ géolocalisation : bouton + latitude / longitude
-function createGeolocField(id, obligatoire) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "geoloc-wrapper";
-
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.textContent = "Acquérir la position";
-  btn.className = "btn btn-secondary btn-geoloc";
-
-  const latInput = document.createElement("input");
-  latInput.type = "text";
-  latInput.placeholder = "Latitude";
-  latInput.id = "var-" + id + "-lat";
-  latInput.className = "geoloc-input";
-  latInput.dataset.varId = id;
-  latInput.dataset.varObligatoire = String(obligatoire);
-
-  const lonInput = document.createElement("input");
-  lonInput.type = "text";
-  lonInput.placeholder = "Longitude";
-  lonInput.id = "var-" + id + "-lon";
-  lonInput.className = "geoloc-input";
-  lonInput.dataset.varId = id;
-  lonInput.dataset.varObligatoire = String(obligatoire);
-
-  // Mise à jour de la valeur stockée (format "lat, lon")
-  const updateValue = () => {
-    const lat = latInput.value.trim();
-    const lon = lonInput.value.trim();
-    currentVariablesValues[id] = lat && lon ? `${lat}, ${lon}` : "";
-    updatePromptPreview();
-  };
-
-  latInput.addEventListener("input", updateValue);
-  lonInput.addEventListener("input", updateValue);
-
-  btn.addEventListener("click", () => {
-    if (!("geolocation" in navigator)) {
-      alert("La géolocalisation n'est pas supportée par ce navigateur.");
-      return;
-    }
-
-    btn.disabled = true;
-    const originalText = btn.textContent;
-    btn.textContent = "Acquisition en cours…";
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude.toFixed(6);
-        const lon = pos.coords.longitude.toFixed(6);
-        latInput.value = lat;
-        lonInput.value = lon;
-        updateValue();
-        btn.disabled = false;
-        btn.textContent = "Mettre à jour la position";
-      },
-      (err) => {
-        alert("Impossible de récupérer la position : " + err.message);
-        btn.disabled = false;
-        btn.textContent = originalText;
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
-      }
-    );
-  });
-
-  wrapper.appendChild(btn);
-  wrapper.appendChild(latInput);
-  wrapper.appendChild(lonInput);
-
-  return wrapper;
 }
 
 // --- Construction du prompt final ---
@@ -710,12 +604,8 @@ function generateJsonAndQr() {
 
   const categorie = document.getElementById("createCategorie").value.trim();
   const titre = document.getElementById("createTitre").value.trim();
-  const objectif = document
-    .getElementById("createObjectif")
-    .value.trim();
-  const concepteur = document
-    .getElementById("createConcepteur")
-    .value.trim();
+  const objectif = document.getElementById("createObjectif").value.trim();
+  const concepteur = document.getElementById("createConcepteur").value.trim();
   const dateMaj = document.getElementById("createDateMaj").value.trim();
   const version = document.getElementById("createVersion").value.trim();
   const prompt = document.getElementById("createPrompt").value;
@@ -729,8 +619,7 @@ function generateJsonAndQr() {
   if (!objectif) errors.push("L'objectif de la fiche est obligatoire.");
   if (!concepteur) errors.push("Le nom du concepteur est obligatoire.");
   if (!version) errors.push("La version est obligatoire.");
-  if (!prompt.trim())
-    errors.push("Le prompt de la fiche ne doit pas être vide.");
+  if (!prompt.trim()) errors.push("Le prompt de la fiche ne doit pas être vide.");
 
   const variables = [];
   const rows = document.querySelectorAll("#variablesBuilder .variable-row");
@@ -752,15 +641,11 @@ function generateJsonAndQr() {
     if (!label && !id) return;
 
     if (!label) {
-      errors.push(
-        "Variable #" + (index + 1) + " : le label est obligatoire."
-      );
+      errors.push("Variable #" + (index + 1) + " : le label est obligatoire.");
     }
     if (!id) {
       errors.push(
-        "Variable #" +
-          (index + 1) +
-          " : l'identifiant est obligatoire."
+        "Variable #" + (index + 1) + " : l'identifiant est obligatoire."
       );
     }
     if (id && ids.has(id)) {
@@ -862,7 +747,7 @@ function generateJsonAndQr() {
 
   // 4) Détermination dynamique de la taille du QR
   const len = qrText.length;
-  let size = 300; // valeur par défaut
+  let size = 300;          // valeur par défaut
   if (len > 1800) size = 400;
   if (len > 2600) size = 500;
   if (len > 3400) size = 600;
