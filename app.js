@@ -36,25 +36,12 @@ function ensureHtml5QrCodeInstance() {
     );
   }
   if (!html5QrCode) {
-    try {
-      // ✅ Config proche de ta version initiale
-      html5QrCode = new Html5Qrcode("camera", {
-        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true
-        },
-        verbose: false
-      });
-    } catch (e) {
-      console.warn(
-        "Configuration avancée Html5Qrcode impossible, fallback simple :",
-        e
-      );
-      html5QrCode = new Html5Qrcode("camera");
-    }
+    // ✅ Version simple, sans features expérimentales
+    html5QrCode = new Html5Qrcode("camera");
   }
   return html5QrCode;
 }
+
 
 // =============================
 // Onglets
