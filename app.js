@@ -146,10 +146,10 @@ function startCameraScan() {
     return;
   }
 
-  // ✅ Config simple : même zone que ton overlay (260x260)
+  // ✅ Config MINIMALE : pas de qrbox, pas d'aspectRatio
+  // → Html5Qrcode analyse TOUTE l'image
   const config = {
-    fps: 10,
-    qrbox: 260    // carré centré
+    fps: 10
   };
 
   const onScanSuccess = (decodedText) => {
@@ -159,11 +159,11 @@ function startCameraScan() {
   };
 
   const onScanFailure = (errorMessage) => {
-    // appelé très souvent, on se contente d'un log discret
+    // Appelé souvent, on log juste en debug
     // console.debug("Erreur scan frame:", errorMessage);
   };
 
-  // 🔍 On passe TOUJOURS par getCameras (Android + iOS + desktop)
+  // 🔍 Toujours passer par getCameras (Android + iOS + desktop)
   Html5Qrcode.getCameras()
     .then((devices) => {
       if (!devices || devices.length === 0) {
@@ -203,6 +203,7 @@ function startCameraScan() {
       videoBox.hidden = true;
     });
 }
+
 
 
 function stopCameraScan() {
